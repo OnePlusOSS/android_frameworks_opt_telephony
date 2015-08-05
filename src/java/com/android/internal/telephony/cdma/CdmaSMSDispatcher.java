@@ -106,15 +106,16 @@ public class CdmaSMSDispatcher extends SMSDispatcher {
 
     /** {@inheritDoc} */
     @Override
-    public void sendData(String destAddr, String scAddr, int destPort,
-            byte[] data, PendingIntent sentIntent, PendingIntent deliveryIntent) {
+    protected void sendData(String destAddr, String scAddr, int destPort,
+            byte[] data, PendingIntent sentIntent, PendingIntent deliveryIntent,
+            String callingPackage) {
         SmsMessage.SubmitPdu pdu = SmsMessage.getSubmitPdu(
                 scAddr, destAddr, destPort, data, (deliveryIntent != null));
         if (pdu != null) {
             HashMap map = getSmsTrackerMap(destAddr, scAddr, destPort, data, pdu);
             SmsTracker tracker = getSmsTracker(map, sentIntent, deliveryIntent, getFormat(),
-                    null /*messageUri*/, false /*isExpectMore*/, null /*fullMessageText*/,
-                    false /*isText*/, true /*persistMessage*/);
+                null /*messageUri*/, false /*isExpectMore*/, null /*fullMessageText*/,
+                false /*isText*/, true /*persistMessage*/, callingPackage);
 
             String carrierPackage = getCarrierAppPackageName();
             if (carrierPackage != null) {
@@ -148,7 +149,7 @@ public class CdmaSMSDispatcher extends SMSDispatcher {
             HashMap map = getSmsTrackerMap(destAddr, scAddr, text, pdu);
             SmsTracker tracker = getSmsTracker(map, sentIntent, deliveryIntent, getFormat(),
                     messageUri, isExpectMore, text, true /*isText*/, validityPeriod,
-                    persistMessage);
+                    persistMessage, callingPkg);
 
             String carrierPackage = getCarrierAppPackageName();
             if (carrierPackage != null) {
@@ -191,7 +192,7 @@ public class CdmaSMSDispatcher extends SMSDispatcher {
             PendingIntent sentIntent, PendingIntent deliveryIntent, boolean lastPart,
             int priority, boolean isExpectMore, int validityPeriod,
             AtomicInteger unsentPartCount, AtomicBoolean anyPartFailed, Uri messageUri,
-            String fullMessageText) {
+            String fullMessageText, String callingPackage) {
         UserData uData = new UserData();
         uData.payloadStr = message;
         uData.userDataHeader = smsHeader;
@@ -216,7 +217,7 @@ public class CdmaSMSDispatcher extends SMSDispatcher {
         return getSmsTracker(map, sentIntent, deliveryIntent,
                 getFormat(), unsentPartCount, anyPartFailed, messageUri, smsHeader,
                 (!lastPart || isExpectMore), fullMessageText, true /*isText*/, validityPeriod,
-                true /*persistMessage*/);
+                true /*persistMessage*/, callingPackage);
     }
 
     @Override
