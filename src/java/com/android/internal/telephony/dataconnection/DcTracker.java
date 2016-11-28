@@ -1357,11 +1357,16 @@ public class DcTracker extends Handler {
         return false;
     }
 
+    protected boolean getAttachedStatus() {
+        return mAttached.get();
+    }
+
+
     private boolean isDataAllowed(DataAllowFailReason failureReason) {
         final boolean internalDataEnabled;
         internalDataEnabled = mDataEnabledSettings.isInternalDataEnabled();
 
-        boolean attachedState = mAttached.get();
+        boolean attachedState = getAttachedStatus();
         boolean desiredPowerState = mPhone.getServiceStateTracker().getDesiredPowerState();
         boolean radioStateFromCarrier = mPhone.getServiceStateTracker().getPowerStateFromCarrier();
         int radioTech = mPhone.getServiceState().getRilDataRadioTechnology();
