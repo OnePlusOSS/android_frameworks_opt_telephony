@@ -409,6 +409,25 @@ public class SubscriptionInfoUpdater extends Handler {
 
         if (isAllIccIdQueryDone()) {
             updateSubscriptionInfoByIccId();
+
+            for (int i = 0; i < PROJECT_SIM_NUM; i++) {
+                String operator = mPhone[i].getOperatorNumeric();
+
+                if (operator != null && !TextUtils.isEmpty(operator)) {
+                    int[] subIds = SubscriptionController.getInstance().getSubId(i);
+                    int subId =
+                        (subIds != null) ? subIds[0] : SubscriptionManager.DEFAULT_SUBSCRIPTION_ID;
+                    logd("subId for slot" + i + " is " + subId);
+                    if (SubscriptionManager.isValidSubscriptionId(subId)) {
+                        if (subId == SubscriptionController.getInstance().getDefaultSubId()) {
+                            MccTable.updateMccMncConfiguration(mContext, operator, false);
+                        }
+                        SubscriptionController.getInstance().setMccMnc(operator, subId);
+                    }
+                } else {
+                    logd("EVENT_RECORDS_LOADED Operator name is null");
+                }
+            }
         }
 
         int subId = SubscriptionManager.DEFAULT_SUBSCRIPTION_ID;
@@ -418,16 +437,6 @@ public class SubscriptionInfoUpdater extends Handler {
         }
 
         if (SubscriptionManager.isValidSubscriptionId(subId)) {
-            String operator = mPhone[slotId].getOperatorNumeric();
-
-            if (operator != null && !TextUtils.isEmpty(operator)) {
-                if (subId == SubscriptionController.getInstance().getDefaultSubId()) {
-                    MccTable.updateMccMncConfiguration(mContext, operator, false);
-                }
-                SubscriptionController.getInstance().setMccMnc(operator, subId);
-            } else {
-                logd("EVENT_RECORDS_LOADED Operator name is null");
-            }
             TelephonyManager tm = TelephonyManager.getDefault();
 
             String msisdn = tm.getLine1Number(subId);
