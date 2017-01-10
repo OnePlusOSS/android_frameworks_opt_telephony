@@ -37,6 +37,7 @@ import android.os.AsyncResult;
 import android.os.Binder;
 import android.os.Handler;
 import android.os.Message;
+import android.os.PersistableBundle;
 import android.os.Process;
 import android.os.RemoteException;
 import android.os.UserHandle;
@@ -47,6 +48,7 @@ import android.service.carrier.CarrierMessagingService;
 import android.service.carrier.ICarrierMessagingCallback;
 import android.service.carrier.ICarrierMessagingService;
 import android.telephony.CarrierMessagingServiceManager;
+import android.telephony.CarrierConfigManager;
 import android.telephony.PhoneNumberUtils;
 import android.telephony.Rlog;
 import android.telephony.ServiceState;
@@ -67,6 +69,7 @@ import android.widget.TextView;
 
 import com.android.internal.R;
 import com.android.internal.telephony.GsmAlphabet.TextEncodingDetails;
+import com.android.internal.telephony.SmsUsageMonitor.SmsAuthorizationCallback;
 import com.android.internal.telephony.uicc.UiccCard;
 import com.android.internal.telephony.uicc.UiccController;
 
@@ -1037,7 +1040,23 @@ public abstract class SMSDispatcher extends Handler {
                 return;
             }
 
-            sendSms(tracker);
+            if (mUsageMonitor.isSmsAuthorizationEnabled()) {
+                final SmsAuthorizationCallback callback = new SmsAuthorizationCallback() {
+                    @Override
+                    public void onAuthorizationResult(final boolean accepted) {
+                        if (accepted) {
+                            sendSms(tracker);
+                        } else {
+                            tracker.onFailed(mContext, RESULT_ERROR_GENERIC_FAILURE,
+                                    SmsUsageMonitor.ERROR_CODE_BLOCKED);
+                        }
+                    }
+                };
+                mUsageMonitor.authorizeOutgoingSms(tracker.mAppInfo, tracker.mDestAddress,
+                        tracker.mFullMessageText, callback, this);
+            } else {
+                sendSms(tracker);
+            }
         }
 
         if (PhoneNumberUtils.isLocalEmergencyNumber(mContext, tracker.mDestAddress)) {
@@ -1858,5 +1877,19 @@ public abstract class SMSDispatcher extends Handler {
         } catch (PackageManager.NameNotFoundException re) {
             throw new SecurityException("Caller is not phone or carrier app!");
         }
+    }
+
+    protected boolean isRetryAlwaysOverIMS() {
+        CarrierConfigManager configManager = (CarrierConfigManager) mPhone.getContext()
+                .getSystemService(Context.CARRIER_CONFIG_SERVICE);
+        PersistableBundle b = null;
+        boolean retryAlwaysOverIMS = false;
+        if (configManager != null) {
+            b = configManager.getConfigForSubId(getSubId());
+        }
+        if (b != null) {
+            retryAlwaysOverIMS = b.getBoolean("config_retry_sms_over_ims", false);
+        }
+        return retryAlwaysOverIMS;
     }
 }
