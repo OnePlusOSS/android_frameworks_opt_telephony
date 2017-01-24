@@ -168,13 +168,14 @@ public class ImsSMSDispatcher extends SMSDispatcher {
 
     @Override
     public void sendData(String destAddr, String scAddr, int destPort,
-            byte[] data, PendingIntent sentIntent, PendingIntent deliveryIntent) {
+            byte[] data, PendingIntent sentIntent, PendingIntent deliveryIntent,
+            String callingPackage) {
         if (isCdmaMo()) {
             mCdmaDispatcher.sendData(destAddr, scAddr, destPort,
-                    data, sentIntent, deliveryIntent);
+                    data, sentIntent, deliveryIntent, callingPackage);
         } else {
             mGsmDispatcher.sendData(destAddr, scAddr, destPort,
-                    data, sentIntent, deliveryIntent);
+                    data, sentIntent, deliveryIntent, callingPackage);
         }
     }
 
@@ -381,7 +382,7 @@ public class ImsSMSDispatcher extends SMSDispatcher {
             String message, SmsHeader smsHeader, int format, PendingIntent sentIntent,
             PendingIntent deliveryIntent, boolean lastPart, int priority, boolean isExpectMore,
             int validityPeriod, AtomicInteger unsentPartCount, AtomicBoolean anyPartFailed,
-            Uri messageUri, String fullMessageText) {
+            Uri messageUri, String fullMessageText, String callingPackage) {
         Rlog.e(TAG, "Error! Not implemented for IMS.");
         return null;
     }
