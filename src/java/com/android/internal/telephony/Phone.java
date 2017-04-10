@@ -1150,7 +1150,9 @@ public abstract class Phone extends Handler implements PhoneInternalInterface {
         } else {
             Rlog.d(LOG_TAG, "setNetworkSelectionModeAutomatic - already auto, ignoring");
             // let the calling application know that the we are ignoring automatic mode switch.
-            nsm.message.arg1 = ALREADY_IN_AUTO_SELECTION;
+            if (nsm.message != null) {
+                nsm.message.arg1 = ALREADY_IN_AUTO_SELECTION;
+            }
 
             ar.userObj = nsm;
             handleSetSelectNetwork(ar);
