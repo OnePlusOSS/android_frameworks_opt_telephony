@@ -1298,7 +1298,7 @@ public abstract class Phone extends Handler implements PhoneInternalInterface {
      * automatic selection, all depending upon the value in the shared
      * preferences.
      */
-    private void restoreSavedNetworkSelection(Message response) {
+    protected void restoreSavedNetworkSelection(Message response) {
         // retrieve the operator
         OperatorInfo networkSelection = getSavedNetworkSelection();
 
@@ -2153,6 +2153,11 @@ public abstract class Phone extends Handler implements PhoneInternalInterface {
      */
     public boolean isInEcm() {
         return mIsPhoneInEcmState;
+    }
+
+    public void setIsInEcm(boolean isInEcm) {
+        setSystemProperty(TelephonyProperties.PROPERTY_INECM_MODE, String.valueOf(isInEcm));
+        mIsPhoneInEcmState = isInEcm;
     }
 
     private static int getVideoState(Call call) {

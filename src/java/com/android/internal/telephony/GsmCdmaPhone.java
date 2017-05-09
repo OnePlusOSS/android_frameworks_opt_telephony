@@ -1864,12 +1864,12 @@ public class GsmCdmaPhone extends Phone {
 
     @Override
     public boolean getDataRoamingEnabled() {
-        return mDcTracker.getDataOnRoamingEnabled();
+        return mDcTracker.getDataRoamingEnabled();
     }
 
     @Override
     public void setDataRoamingEnabled(boolean enable) {
-        mDcTracker.setDataOnRoamingEnabled(enable);
+        mDcTracker.setDataRoamingEnabled(enable);
     }
 
     @Override
@@ -2793,9 +2793,9 @@ public class GsmCdmaPhone extends Phone {
                     + mIsPhoneInEcmState);
         }
         // if phone is not in Ecm mode, and it's changed to Ecm mode
-        if (mIsPhoneInEcmState == false) {
-            setSystemProperty(TelephonyProperties.PROPERTY_INECM_MODE, "true");
-            mIsPhoneInEcmState = true;
+        if (!mIsPhoneInEcmState) {
+            setIsInEcm(true);
+
             // notify change
             sendEmergencyCallbackModeChange();
 
@@ -2825,8 +2825,7 @@ public class GsmCdmaPhone extends Phone {
         // if exiting ecm success
         if (ar.exception == null) {
             if (mIsPhoneInEcmState) {
-                setSystemProperty(TelephonyProperties.PROPERTY_INECM_MODE, "false");
-                mIsPhoneInEcmState = false;
+                setIsInEcm(false);
             }
 
             // release wakeLock

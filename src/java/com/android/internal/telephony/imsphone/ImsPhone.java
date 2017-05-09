@@ -101,6 +101,7 @@ import com.android.internal.telephony.TelephonyProperties;
 import com.android.internal.telephony.UUSInfo;
 import com.android.internal.telephony.gsm.SuppServiceNotification;
 import com.android.internal.telephony.uicc.IccRecords;
+import com.android.internal.telephony.util.TelephonyNotificationBuilder;
 
 import java.io.FileDescriptor;
 import java.io.PrintWriter;
@@ -220,10 +221,6 @@ public class ImsPhone extends ImsPhoneBase {
         mSS.setStateOff();
 
         mPhoneId = mDefaultPhone.getPhoneId();
-
-        // This is needed to handle phone process crashes
-        // Same property is used for both CDMA & IMS phone.
-        mIsPhoneInEcmState = getInEcmMode();
 
         PowerManager pm = (PowerManager) context.getSystemService(Context.POWER_SERVICE);
         mWakeLock = pm.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, LOG_TAG);
@@ -557,6 +554,16 @@ public class ImsPhone extends ImsPhoneBase {
        return (foregroundCallState.isAlive() ||
                backgroundCallState.isAlive() ||
                ringingCallState.isAlive());
+    }
+
+    @Override
+    public boolean isInEcm() {
+        return mDefaultPhone.isInEcm();
+    }
+
+    @Override
+    public void setIsInEcm(boolean isInEcm){
+        mDefaultPhone.setIsInEcm(isInEcm);
     }
 
     public void notifyNewRingingConnection(Connection c) {
@@ -1395,7 +1402,7 @@ public class ImsPhone extends ImsPhoneBase {
     private void sendEmergencyCallbackModeChange() {
         // Send an Intent
         Intent intent = new Intent(TelephonyIntents.ACTION_EMERGENCY_CALLBACK_MODE_CHANGED);
-        intent.putExtra(PhoneConstants.PHONE_IN_ECM_STATE, mIsPhoneInEcmState);
+        intent.putExtra(PhoneConstants.PHONE_IN_ECM_STATE, isInEcm());
         SubscriptionManager.putPhoneIdAndSubIdExtra(intent, getPhoneId());
         ActivityManager.broadcastStickyIntent(intent, UserHandle.USER_ALL);
         if (DBG) Rlog.d(LOG_TAG, "sendEmergencyCallbackModeChange");
@@ -1421,12 +1428,11 @@ public class ImsPhone extends ImsPhoneBase {
     private void handleEnterEmergencyCallbackMode() {
         if (DBG) {
             Rlog.d(LOG_TAG, "handleEnterEmergencyCallbackMode,mIsPhoneInEcmState= "
-                    + mIsPhoneInEcmState);
+                    + isInEcm());
         }
         // if phone is not in Ecm mode, and it's changed to Ecm mode
-        if (mIsPhoneInEcmState == false) {
-            setSystemProperty(TelephonyProperties.PROPERTY_INECM_MODE, "true");
-            mIsPhoneInEcmState = true;
+        if (!isInEcm()) {
+            setIsInEcm(true);
             // notify change
             sendEmergencyCallbackModeChange();
 
@@ -1443,12 +1449,11 @@ public class ImsPhone extends ImsPhoneBase {
     private void handleExitEmergencyCallbackMode() {
         if (DBG) {
             Rlog.d(LOG_TAG, "handleExitEmergencyCallbackMode: mIsPhoneInEcmState = "
-                    + mIsPhoneInEcmState);
+                    + isInEcm());
         }
 
-        if (mIsPhoneInEcmState) {
-            setSystemProperty(TelephonyProperties.PROPERTY_INECM_MODE, "false");
-            mIsPhoneInEcmState = false;
+        if (isInEcm()) {
+            setIsInEcm(false);
         }
 
         // Remove pending exit Ecm runnable, if any
@@ -1564,13 +1569,15 @@ public class ImsPhone extends ImsPhoneBase {
                         );
 
                 final Notification notification =
-                        new Notification.Builder(mContext)
+                        new TelephonyNotificationBuilder(mContext)
                                 .setSmallIcon(android.R.drawable.stat_sys_warning)
                                 .setContentTitle(title)
                                 .setContentText(messageNotification)
                                 .setAutoCancel(true)
                                 .setContentIntent(resultPendingIntent)
-                                .setStyle(new Notification.BigTextStyle().bigText(messageNotification))
+                                .setStyle(new Notification.BigTextStyle()
+                                .bigText(messageNotification))
+                                .setChannelId(TelephonyNotificationBuilder.CHANNEL_ID_WFC)
                                 .build();
                 final String notificationTag = "wifi_calling";
                 final int notificationId = 1;
@@ -1738,7 +1745,7 @@ public class ImsPhone extends ImsPhoneBase {
         pw.println("  mPostDialHandler = " + mPostDialHandler);
         pw.println("  mSS = " + mSS);
         pw.println("  mWakeLock = " + mWakeLock);
-        pw.println("  mIsPhoneInEcmState = " + mIsPhoneInEcmState);
+        pw.println("  mIsPhoneInEcmState = " + isInEcm());
         pw.println("  mEcmExitRespRegistrant = " + mEcmExitRespRegistrant);
         pw.println("  mSilentRedialRegistrants = " + mSilentRedialRegistrants);
         pw.println("  mImsRegistered = " + mImsRegistered);
