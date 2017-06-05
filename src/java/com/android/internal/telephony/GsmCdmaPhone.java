@@ -510,7 +510,7 @@ public class GsmCdmaPhone extends Phone {
 
             ret = PhoneConstants.DataState.DISCONNECTED;
         } else if (mSST.getCurrentDataConnectionState() != ServiceState.STATE_IN_SERVICE
-                && (isPhoneTypeCdma() ||
+                && (isPhoneTypeCdma() || isPhoneTypeCdmaLte() ||
                 (isPhoneTypeGsm() && !apnType.equals(PhoneConstants.APN_TYPE_EMERGENCY)))) {
             // If we're out of service, open TCP sockets may still work
             // but no data will flow
@@ -2483,6 +2483,11 @@ public class GsmCdmaPhone extends Phone {
                 mIccPhoneBookIntManager.updateIccRecords(mIccRecords.get());
             }
         }
+    }
+
+    @Override
+    public SIMRecords getSIMRecords() {
+        return mSimRecords;
     }
 
     private void processIccRecordEvents(int eventCode) {
