@@ -134,7 +134,7 @@ public class GsmCdmaPhoneTest extends TelephonyTest {
     public void tearDown() throws Exception {
         mPhoneUT.removeCallbacksAndMessages(null);
         mPhoneUT = null;
-        mGsmCdmaPhoneTestHandler.quitSafely();
+        mGsmCdmaPhoneTestHandler.quit();
         super.tearDown();
     }
 
@@ -506,6 +506,17 @@ public class GsmCdmaPhoneTest extends TelephonyTest {
                 nullable(Message.class));
         waitForMs(50);
         verify(mSimRecords).setVoiceCallForwardingFlag(anyInt(), anyBoolean(), eq(cfNumber));
+    }
+
+    @Test
+    public void testSetVideoCallForwardingPreference() {
+        mPhoneUT.setVideoCallForwardingPreference(false);
+        boolean cfPref = mPhoneUT.getVideoCallForwardingPreference();
+        assertFalse(cfPref);
+
+        mPhoneUT.setVideoCallForwardingPreference(true);
+        cfPref = mPhoneUT.getVideoCallForwardingPreference();
+        assertTrue(cfPref);
     }
 
     /**

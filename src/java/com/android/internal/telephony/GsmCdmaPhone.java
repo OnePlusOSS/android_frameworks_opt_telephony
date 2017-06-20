@@ -1360,6 +1360,27 @@ public class GsmCdmaPhone extends Phone {
     }
 
     @Override
+    public void addParticipant(String dialString) throws CallStateException {
+        Phone imsPhone = mImsPhone;
+        boolean imsUseEnabled = isImsUseEnabled()
+                 && imsPhone != null
+                 && (imsPhone.isVolteEnabled() || imsPhone.isWifiCallingEnabled() ||
+                 imsPhone.isVideoEnabled())
+                 && (imsPhone.getServiceState().getState() == ServiceState.STATE_IN_SERVICE);
+
+        if (imsUseEnabled) {
+            try {
+                logd("addParticipant :: Trying to add participant in IMS call");
+                imsPhone.addParticipant(dialString);
+            } catch (CallStateException e) {
+                loge("addParticipant :: IMS PS call exception " + e);
+            }
+        } else {
+            loge("addParticipant :: IMS is disabled so unable to add participant with IMS call");
+        }
+    }
+
+    @Override
     public void setRadioPower(boolean power) {
         mSST.setRadioPower(power);
     }
@@ -1669,14 +1690,28 @@ public class GsmCdmaPhone extends Phone {
         return (action == CF_ACTION_ENABLE) || (action == CF_ACTION_REGISTRATION);
     }
 
+    private boolean isImsUtEnabledOverCdma() {
+        return isPhoneTypeCdmaLte()
+            && mImsPhone != null
+            && mImsPhone.isUtEnabled();
+    }
+
     @Override
     public void getCallForwardingOption(int commandInterfaceCFReason, Message onComplete) {
-        if (isPhoneTypeGsm()) {
+        getCallForwardingOption(commandInterfaceCFReason,
+            CommandsInterface.SERVICE_CLASS_NONE, onComplete);
+    }
+
+    @Override
+    public void getCallForwardingOption(int commandInterfaceCFReason,
+            int commandInterfaceServiceClass, Message onComplete) {
+        if (isPhoneTypeGsm() || isImsUtEnabledOverCdma()) {
             Phone imsPhone = mImsPhone;
             if ((imsPhone != null)
-                    && ((imsPhone.getServiceState().getState() == ServiceState.STATE_IN_SERVICE)
+                && ((imsPhone.getServiceState().getState() == ServiceState.STATE_IN_SERVICE)
                     || imsPhone.isUtEnabled())) {
-                imsPhone.getCallForwardingOption(commandInterfaceCFReason, onComplete);
+                imsPhone.getCallForwardingOption(commandInterfaceCFReason,
+                            commandInterfaceServiceClass, onComplete);
                 return;
             }
 
@@ -1688,10 +1723,12 @@ public class GsmCdmaPhone extends Phone {
                 } else {
                     resp = onComplete;
                 }
-                mCi.queryCallForwardStatus(commandInterfaceCFReason, 0, null, resp);
+
+                mCi.queryCallForwardStatus(commandInterfaceCFReason,
+                        commandInterfaceServiceClass, null, resp);
             }
         } else {
-            loge("getCallForwardingOption: not possible in CDMA");
+            loge("getCallForwardingOption: not possible in CDMA without IMS");
         }
     }
 
@@ -1701,13 +1738,28 @@ public class GsmCdmaPhone extends Phone {
             String dialingNumber,
             int timerSeconds,
             Message onComplete) {
-        if (isPhoneTypeGsm()) {
+        setCallForwardingOption(commandInterfaceCFAction,
+                commandInterfaceCFReason, dialingNumber,
+                CommandsInterface.SERVICE_CLASS_VOICE,
+                timerSeconds, onComplete);
+    }
+
+
+    @Override
+    public void setCallForwardingOption(int commandInterfaceCFAction,
+            int commandInterfaceCFReason,
+            String dialingNumber,
+            int commandInterfaceServiceClass,
+            int timerSeconds,
+            Message onComplete) {
+        if (isPhoneTypeGsm() || isImsUtEnabledOverCdma()) {
             Phone imsPhone = mImsPhone;
             if ((imsPhone != null)
                     && ((imsPhone.getServiceState().getState() == ServiceState.STATE_IN_SERVICE)
                     || imsPhone.isUtEnabled())) {
                 imsPhone.setCallForwardingOption(commandInterfaceCFAction,
-                        commandInterfaceCFReason, dialingNumber, timerSeconds, onComplete);
+                        commandInterfaceCFReason, dialingNumber,
+                        commandInterfaceServiceClass, timerSeconds, onComplete);
                 return;
             }
 
@@ -1724,13 +1776,13 @@ public class GsmCdmaPhone extends Phone {
                 }
                 mCi.setCallForward(commandInterfaceCFAction,
                         commandInterfaceCFReason,
-                        CommandsInterface.SERVICE_CLASS_VOICE,
+                        commandInterfaceServiceClass,
                         dialingNumber,
                         timerSeconds,
                         resp);
             }
         } else {
-            loge("setCallForwardingOption: not possible in CDMA");
+            loge("setCallForwardingOption: not possible in CDMA without IMS");
         }
     }
 
@@ -1977,6 +2029,7 @@ public class GsmCdmaPhone extends Phone {
     }
 
     private void onNetworkInitiatedUssd(MmiCode mmi) {
+        Rlog.v(LOG_TAG, "onNetworkInitiatedUssd: mmi=" + mmi);
         mMmiCompleteRegistrants.notifyRegistrants(
             new AsyncResult(null, mmi, null));
     }
@@ -2263,6 +2316,7 @@ public class GsmCdmaPhone extends Phone {
                     if (imsi != null && imsiFromSIM != null && !imsiFromSIM.equals(imsi)) {
                         storeVoiceMailNumber(null);
                         setVmSimImsi(null);
+                        setVideoCallForwardingPreference(false);
                     }
                 }
 

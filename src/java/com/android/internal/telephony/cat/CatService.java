@@ -523,6 +523,7 @@ public class CatService extends Handler implements AppInterface {
 
     private void broadcastCatCmdIntent(CatCmdMessage cmdMsg) {
         Intent intent = new Intent(AppInterface.CAT_CMD_ACTION);
+        intent.addFlags(Intent.FLAG_RECEIVER_FOREGROUND);
         intent.putExtra("STK CMD", cmdMsg);
         intent.putExtra("SLOT_ID", mSlotId);
         intent.setComponent(AppInterface.getDefaultSTKApplication());
@@ -1065,6 +1066,13 @@ public class CatService extends Handler implements AppInterface {
             }
             break;
         case NO_RESPONSE_FROM_USER:
+            // No need to send terminal response for SET UP CALL on user timeout,
+            // instead use dedicated API
+            if (type == CommandType.SET_UP_CALL) {
+                mCmdIf.handleCallSetupRequestFromSim(false, null);
+                mCurrntCmd = null;
+                return;
+            }
         case UICC_SESSION_TERM_BY_USER:
             resp = null;
             break;

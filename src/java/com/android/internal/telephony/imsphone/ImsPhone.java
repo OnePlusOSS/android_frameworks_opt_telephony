@@ -77,6 +77,8 @@ import static com.android.internal.telephony.CommandsInterface.CF_REASON_NO_REPL
 import static com.android.internal.telephony.CommandsInterface.CF_REASON_NOT_REACHABLE;
 import static com.android.internal.telephony.CommandsInterface.CF_REASON_BUSY;
 import static com.android.internal.telephony.CommandsInterface.CF_REASON_UNCONDITIONAL;
+import static com.android.internal.telephony.CommandsInterface.SERVICE_CLASS_DATA_SYNC;
+import static com.android.internal.telephony.CommandsInterface.SERVICE_CLASS_PACKET;
 import static com.android.internal.telephony.CommandsInterface.SERVICE_CLASS_VOICE;
 import static com.android.internal.telephony.CommandsInterface.SERVICE_CLASS_NONE;
 
@@ -267,6 +269,13 @@ public class ImsPhone extends ImsPhoneBase {
     @Override
     public CallTracker getCallTracker() {
         return mCT;
+    }
+
+    public void setVoiceCallForwardingFlag(int line, boolean enable, String number) {
+        IccRecords r = getIccRecords();
+        if (r != null) {
+            setVoiceCallForwardingFlag(r, line, enable, number);
+        }
     }
 
     public ImsExternalCallTracker getExternalCallTracker() {
@@ -605,8 +614,19 @@ public class ImsPhone extends ImsPhoneBase {
     private Connection dialInternal(String dialString, int videoState,
                                     Bundle intentExtras, ResultReceiver wrappedCallback)
             throws CallStateException {
-        // Need to make sure dialString gets parsed properly
-        String newDialString = PhoneNumberUtils.stripSeparators(dialString);
+        boolean isConferenceUri = false;
+        boolean isSkipSchemaParsing = false;
+        if (intentExtras != null) {
+            isConferenceUri = intentExtras.getBoolean(
+                    TelephonyProperties.EXTRA_DIAL_CONFERENCE_URI, false);
+            isSkipSchemaParsing = intentExtras.getBoolean(
+                    TelephonyProperties.EXTRA_SKIP_SCHEMA_PARSING, false);
+        }
+        String newDialString = dialString;
+        // Need to make sure dialString gets parsed properly.
+        if (!isConferenceUri && !isSkipSchemaParsing) {
+            newDialString = PhoneNumberUtils.stripSeparators(dialString);
+        }
 
         // handle in-call MMI first if applicable
         if (handleInCallMmiCommands(newDialString)) {
@@ -654,6 +674,16 @@ public class ImsPhone extends ImsPhoneBase {
 
             return null;
         }
+    }
+
+    @Override
+    public void addParticipant(String dialString) throws CallStateException {
+        addParticipant(dialString, null);
+    }
+
+    @Override
+    public void addParticipant(String dialString, Message onComplete) throws CallStateException {
+        mCT.addParticipant(dialString, onComplete);
     }
 
     @Override
@@ -818,7 +848,15 @@ public class ImsPhone extends ImsPhoneBase {
     @Override
     public void getCallForwardingOption(int commandInterfaceCFReason,
             Message onComplete) {
-        if (DBG) Rlog.d(LOG_TAG, "getCallForwardingOption reason=" + commandInterfaceCFReason);
+        getCallForwardingOption(commandInterfaceCFReason,
+            SERVICE_CLASS_VOICE, onComplete);
+    }
+
+    @Override
+    public void getCallForwardingOption(int commandInterfaceCFReason,
+            int commandInterfaceServiceClass, Message onComplete) {
+        if (DBG) Rlog.d(LOG_TAG, "getCallForwardingOption reason=" + commandInterfaceCFReason +
+                "serviceclass =" + commandInterfaceServiceClass);
         if (isValidCommandInterfaceCFReason(commandInterfaceCFReason)) {
             if (DBG) Rlog.d(LOG_TAG, "requesting call forwarding query.");
             Message resp;
@@ -826,14 +864,16 @@ public class ImsPhone extends ImsPhoneBase {
 
             try {
                 ImsUtInterface ut = mCT.getUtInterface();
-                ut.queryCallForward(getConditionFromCFReason(commandInterfaceCFReason), null, resp);
+                ut.queryCallForward(getConditionFromCFReason(commandInterfaceCFReason), null,
+                        commandInterfaceServiceClass, resp);
             } catch (ImsException e) {
                 sendErrorResponse(onComplete, e);
             }
         } else if (onComplete != null) {
-            sendErrorResponse(onComplete);
+             sendErrorResponse(onComplete);
         }
     }
+
 
     @Override
     public void setCallForwardingOption(int commandInterfaceCFAction,
@@ -845,6 +885,7 @@ public class ImsPhone extends ImsPhoneBase {
                 CommandsInterface.SERVICE_CLASS_VOICE, timerSeconds, onComplete);
     }
 
+    @Override
     public void setCallForwardingOption(int commandInterfaceCFAction,
             int commandInterfaceCFReason,
             String dialingNumber,
@@ -1111,6 +1152,7 @@ public class ImsPhone extends ImsPhoneBase {
          * The exception is cancellation of an incoming USSD-REQUEST, which is
          * not on the list.
          */
+        Rlog.d(LOG_TAG, "onMMIDone: mmi=" + mmi);
         if (mPendingMMIs.remove(mmi) || mmi.isUssdRequest()) {
             ResultReceiver receiverCallback = mmi.getUssdCallbackReceiver();
             if (receiverCallback != null) {
@@ -1119,6 +1161,7 @@ public class ImsPhone extends ImsPhoneBase {
                 sendUssdResponse(mmi.getDialString(), mmi.getMessage(), returnCode,
                         receiverCallback );
             } else {
+                Rlog.v(LOG_TAG, "onMMIDone: notifyRegistrants");
                 mMmiCompleteRegistrants.notifyRegistrants(
                     new AsyncResult(null, mmi, null));
             }
@@ -1193,7 +1236,12 @@ public class ImsPhone extends ImsPhoneBase {
         CallForwardInfo cfInfo = new CallForwardInfo();
         cfInfo.status = info.mStatus;
         cfInfo.reason = getCFReasonFromCondition(info.mCondition);
-        cfInfo.serviceClass = SERVICE_CLASS_VOICE;
+        //Check if the service class signifies Video call forward
+        if(info.mServiceClass == (SERVICE_CLASS_DATA_SYNC + SERVICE_CLASS_PACKET)) {
+            cfInfo.serviceClass = info.mServiceClass;
+        } else {
+            cfInfo.serviceClass = SERVICE_CLASS_VOICE;
+        }
         cfInfo.toa = info.mToA;
         cfInfo.number = info.mNumber;
         cfInfo.timeSeconds = info.mTimeSeconds;
@@ -1217,7 +1265,12 @@ public class ImsPhone extends ImsPhoneBase {
         } else {
             for (int i = 0, s = infos.length; i < s; i++) {
                 if (infos[i].mCondition == ImsUtInterface.CDIV_CF_UNCONDITIONAL) {
-                    if (r != null) {
+                    //Check if the service class signifies Video call forward
+                    if (infos[i].mServiceClass == (SERVICE_CLASS_DATA_SYNC +
+                                SERVICE_CLASS_PACKET)) {
+                        setVideoCallForwardingPreference(infos[i].mStatus == 1);
+                        notifyCallForwardingIndicator();
+                    } else if (r != null) {
                         setVoiceCallForwardingFlag(r, 1, (infos[i].mStatus == 1),
                             infos[i].mNumber);
                     }
@@ -1338,9 +1391,13 @@ public class ImsPhone extends ImsPhoneBase {
                 if (VDBG) Rlog.d(LOG_TAG, "EVENT_SERVICE_STATE_CHANGED");
                 ar = (AsyncResult) msg.obj;
                 ServiceState newServiceState = (ServiceState) ar.result;
-                // only update if roaming status changed
-                if (mRoaming != newServiceState.getRoaming()) {
-                    if (DBG) Rlog.d(LOG_TAG, "Roaming state changed");
+                // only update if roaming status changed and voice or data is in service.
+                // The STATE_IN_SERVICE is checked to prevent wifi calling mode change when phone
+                // moves from roaming to no service.
+                if (mRoaming != newServiceState.getRoaming() &&
+                           (newServiceState.getVoiceRegState() == ServiceState.STATE_IN_SERVICE ||
+                           newServiceState.getDataRegState() == ServiceState.STATE_IN_SERVICE)) {
+                    if (DBG) Rlog.d(LOG_TAG, "Roaming state changed - " + mRoaming);
                     updateRoamingState(newServiceState.getRoaming());
                 }
                 break;
@@ -1690,6 +1747,11 @@ public class ImsPhone extends ImsPhoneBase {
     @Override
     public void setBroadcastEmergencyCallStateChanges(boolean broadcast) {
         mDefaultPhone.setBroadcastEmergencyCallStateChanges(broadcast);
+    }
+
+    @Override
+    public void notifyCallForwardingIndicator() {
+        mDefaultPhone.notifyCallForwardingIndicator();
     }
 
     @VisibleForTesting

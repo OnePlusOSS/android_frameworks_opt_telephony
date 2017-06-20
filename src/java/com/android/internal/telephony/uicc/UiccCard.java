@@ -44,18 +44,16 @@ import android.text.TextUtils;
 import android.util.LocalLog;
 import android.view.WindowManager;
 
+import com.android.internal.R;
 import com.android.internal.telephony.CommandsInterface;
 import com.android.internal.telephony.CommandsInterface.RadioState;
+import com.android.internal.telephony.cat.CatService;
 import com.android.internal.telephony.uicc.IccCardApplicationStatus.AppType;
 import com.android.internal.telephony.uicc.IccCardStatus.CardState;
 import com.android.internal.telephony.uicc.IccCardStatus.PinState;
-import com.android.internal.telephony.cat.CatService;
-
-import com.android.internal.R;
 
 import java.io.FileDescriptor;
 import java.io.PrintWriter;
-
 import java.util.Arrays;
 import java.util.HashSet;
 import java.util.List;
@@ -97,6 +95,7 @@ public class UiccCard {
     private static final int EVENT_TRANSMIT_APDU_BASIC_CHANNEL_DONE = 18;
     private static final int EVENT_SIM_IO_DONE = 19;
     private static final int EVENT_CARRIER_PRIVILIGES_LOADED = 20;
+    private static final int EVENT_SIM_GET_ATR_DONE = 21;
 
     private static final LocalLog mLocalLog = new LocalLog(100);
 
@@ -387,6 +386,7 @@ public class UiccCard {
                 case EVENT_TRANSMIT_APDU_LOGICAL_CHANNEL_DONE:
                 case EVENT_TRANSMIT_APDU_BASIC_CHANNEL_DONE:
                 case EVENT_SIM_IO_DONE:
+                case EVENT_SIM_GET_ATR_DONE:
                     AsyncResult ar = (AsyncResult)msg.obj;
                     if (ar.exception != null) {
                         loglocal("Exception: " + ar.exception);
@@ -562,8 +562,8 @@ public class UiccCard {
         synchronized (mLock) {
             boolean changed = false;
             for (int i = 0; i < mUiccApplications.length; i++) {
-                if (mUiccApplications[i] != null &&
-                    (aid == null || aid.equals(mUiccApplications[i].getAid()))) {
+                if (mUiccApplications[i] != null
+                        && (TextUtils.isEmpty(aid) || aid.equals(mUiccApplications[i].getAid()))) {
                     // Delete removed applications
                     mUiccApplications[i].dispose();
                     mUiccApplications[i] = null;
@@ -620,6 +620,13 @@ public class UiccCard {
             String pathID, Message response) {
         mCi.iccIO(command, fileID, pathID, p1, p2, p3, null, null,
                 mHandler.obtainMessage(EVENT_SIM_IO_DONE, response));
+    }
+
+    /**
+     * Exposes {@link CommandsInterface.getAtr}
+     */
+    public void getAtr(Message response) {
+        mCi.getAtr(mHandler.obtainMessage(EVENT_SIM_GET_ATR_DONE, response));
     }
 
     /**

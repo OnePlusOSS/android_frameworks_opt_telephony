@@ -209,6 +209,7 @@ public class ServiceStateTracker extends Handler {
     protected static final int EVENT_ALL_DATA_DISCONNECTED             = 49;
     protected static final int EVENT_PHONE_TYPE_SWITCHED               = 50;
     protected static final int EVENT_RADIO_POWER_FROM_CARRIER          = 51;
+    protected static final int EVENT_RADIO_POWER_OFF_DONE              = 52;
 
     protected static final String TIMEZONE_PROPERTY = "persist.sys.timezone";
 
@@ -1099,7 +1100,17 @@ public class ServiceStateTracker extends Handler {
                 }
                 break;
 
-            // GSM
+            case EVENT_RADIO_POWER_OFF_DONE:
+                if (DBG) log("EVENT_RADIO_POWER_OFF_DONE");
+                if (mDeviceShuttingDown && mCi.getRadioState().isAvailable()) {
+                    // during shutdown the modem may not send radio state changed event
+                    // as a result of radio power request
+                    // Hence, issuing shut down regardless of radio power response
+                    mCi.requestShutdown(null);
+                }
+                break;
+
+            //GSM
             case EVENT_SIM_READY:
                 // Reset the mPreviousSubId so we treat a SIM power bounce
                 // as a first boot.  See b/19194287
@@ -1764,6 +1775,9 @@ public class ServiceStateTracker extends Handler {
                 VoiceRegStateResult voiceRegStateResult = (VoiceRegStateResult) ar.result;
                 int registrationState = getRegStateFromHalRegState(voiceRegStateResult.regState);
 
+                //init with 0, because it is treated as a boolean
+                int cssIndicator = voiceRegStateResult.cssSupported ? 1 : 0;
+
                 mNewSS.setVoiceRegState(regCodeToServiceState(registrationState));
                 mNewSS.setRilVoiceRadioTechnology(voiceRegStateResult.rat);
 
@@ -1773,6 +1787,7 @@ public class ServiceStateTracker extends Handler {
 
                     mGsmRoaming = regCodeIsRoaming(registrationState);
                     mNewRejectCode = reasonForDenial;
+                    mNewSS.setCssIndicator(cssIndicator);
 
                     boolean isVoiceCapable = mPhone.getContext().getResources()
                             .getBoolean(com.android.internal.R.bool.config_voice_capable);
@@ -1790,8 +1805,6 @@ public class ServiceStateTracker extends Handler {
                         mEmergencyOnly = false;
                     }
                 } else {
-                    //init with 0, because it is treated as a boolean
-                    int cssIndicator = voiceRegStateResult.cssSupported ? 1 : 0;
                     int roamingIndicator = voiceRegStateResult.roamingIndicator;
 
                     //Indicates if current system is in PR
@@ -2455,7 +2468,11 @@ public class ServiceStateTracker extends Handler {
      */
     public boolean isConcurrentVoiceAndDataAllowed() {
         if (mPhone.isPhoneTypeGsm()) {
-            return (mSS.getRilVoiceRadioTechnology() >= ServiceState.RIL_RADIO_TECHNOLOGY_UMTS);
+            if (mSS.getRilDataRadioTechnology() >= ServiceState.RIL_RADIO_TECHNOLOGY_UMTS) {
+                return true;
+            } else {
+                return mSS.getCssIndicator() == 1;
+            }
         } else if (mPhone.isPhoneTypeCdma()) {
             // Note: it needs to be confirmed which CDMA network types
             // can support voice and data calls concurrently.
@@ -2635,6 +2652,8 @@ public class ServiceStateTracker extends Handler {
         boolean hasDataRoamingOff = mSS.getDataRoaming() && !mNewSS.getDataRoaming();
 
         boolean hasRejectCauseChanged = mRejectCode != mNewRejectCode;
+
+        boolean hasCssIndicatorChanged = (mSS.getCssIndicator() != mNewSS.getCssIndicator());
 
         boolean has4gHandoff = false;
         boolean hasMultiApnSupport = false;
@@ -2912,6 +2931,10 @@ public class ServiceStateTracker extends Handler {
             mPhone.notifyLocationChanged();
         }
 
+        if (hasCssIndicatorChanged) {
+            mPhone.notifyDataConnection(Phone.REASON_CSS_INDICATOR_CHANGED);
+        }
+
         if (mPhone.isPhoneTypeGsm()) {
             if (!isGprsConsistent(mSS.getDataRegState(), mSS.getVoiceRegState())) {
                 if (!mStartedGprsRegCheck && !mReportedGprsNoReg) {
@@ -3027,11 +3050,10 @@ public class ServiceStateTracker extends Handler {
         String idd = mHbpcdUtils.getIddByMcc(
                 Integer.parseInt(operatorNumeric.substring(0,3)));
         if (idd != null && !idd.isEmpty()) {
-            mPhone.setSystemProperty(TelephonyProperties.PROPERTY_OPERATOR_IDP_STRING,
-                    idd);
+            SystemProperties.set(TelephonyProperties.PROPERTY_OPERATOR_IDP_STRING, idd);
         } else {
             // use default "+", since we don't know the current IDP
-            mPhone.setSystemProperty(TelephonyProperties.PROPERTY_OPERATOR_IDP_STRING, "+");
+            SystemProperties.set(TelephonyProperties.PROPERTY_OPERATOR_IDP_STRING, "+");
         }
     }
 
@@ -3261,7 +3283,8 @@ public class ServiceStateTracker extends Handler {
      */
     private boolean isOperatorConsideredNonRoaming(ServiceState s) {
         String operatorNumeric = s.getOperatorNumeric();
-        String[] numericArray = mPhone.getContext().getResources().getStringArray(
+        String[] numericArray = SubscriptionManager.getResourcesForSubId(
+                mPhone.getContext(), mPhone.getSubId()).getStringArray(
                 com.android.internal.R.array.config_operatorConsideredNonRoaming);
 
         if (numericArray.length == 0 || operatorNumeric == null) {
@@ -3278,7 +3301,8 @@ public class ServiceStateTracker extends Handler {
 
     private boolean isOperatorConsideredRoaming(ServiceState s) {
         String operatorNumeric = s.getOperatorNumeric();
-        String[] numericArray = mPhone.getContext().getResources().getStringArray(
+        String[] numericArray = SubscriptionManager.getResourcesForSubId(
+                mPhone.getContext(), mPhone.getSubId()).getStringArray(
                 com.android.internal.R.array.config_sameNamedOperatorConsideredRoaming);
 
         if (numericArray.length == 0 || operatorNumeric == null) {
@@ -3817,7 +3841,7 @@ public class ServiceStateTracker extends Handler {
                 }
                 notificationId = PS_NOTIFICATION;
                 title = context.getText(com.android.internal.R.string.RestrictedOnDataTitle);
-                details = context.getText(com.android.internal.R.string.RestrictedOnDataContent);
+                details = context.getText(com.android.internal.R.string.RestrictedStateContent);
                 break;
             case PS_DISABLED:
                 notificationId = PS_NOTIFICATION;
@@ -3825,16 +3849,16 @@ public class ServiceStateTracker extends Handler {
             case CS_ENABLED:
                 title = context.getText(com.android.internal.R.string.RestrictedOnAllVoiceTitle);
                 details = context.getText(
-                        com.android.internal.R.string.RestrictedOnAllVoiceContent);
+                        com.android.internal.R.string.RestrictedStateContent);
                 break;
             case CS_NORMAL_ENABLED:
                 title = context.getText(com.android.internal.R.string.RestrictedOnNormalTitle);
-                details = context.getText(com.android.internal.R.string.RestrictedOnNormalContent);
+                details = context.getText(com.android.internal.R.string.RestrictedStateContent);
                 break;
             case CS_EMERGENCY_ENABLED:
                 title = context.getText(com.android.internal.R.string.RestrictedOnEmergencyTitle);
                 details = context.getText(
-                        com.android.internal.R.string.RestrictedOnEmergencyContent);
+                        com.android.internal.R.string.RestrictedStateContent);
                 break;
             case CS_DISABLED:
                 // do nothing and cancel the notification later
@@ -4332,7 +4356,7 @@ public class ServiceStateTracker extends Handler {
             mPhone.mCT.mForegroundCall.hangupIfAlive();
         }
 
-        mCi.setRadioPower(false, null);
+        mCi.setRadioPower(false, obtainMessage(EVENT_RADIO_POWER_OFF_DONE));
 
     }
 

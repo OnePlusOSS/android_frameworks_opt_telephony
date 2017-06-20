@@ -207,7 +207,7 @@ public class ImsPhoneCallTrackerTest extends TelephonyTest {
     @After
     public void tearDown() throws Exception {
         mCTUT = null;
-        mImsCTHandlerThread.quitSafely();
+        mImsCTHandlerThread.quit();
         super.tearDown();
     }
 
@@ -224,6 +224,7 @@ public class ImsPhoneCallTrackerTest extends TelephonyTest {
         mImsConnectionStateListener.onFeatureCapabilityChanged(ImsServiceClass.MMTEL,
                 featureEnableArray,
                 featureDisableArray);
+        waitForHandlerAction(mCTHander, 1000);
         assertTrue(mCTUT.isVolteEnabled());
         assertFalse(mCTUT.isVideoCallEnabled());
         // video call not enabled
@@ -235,6 +236,7 @@ public class ImsPhoneCallTrackerTest extends TelephonyTest {
         mImsConnectionStateListener.onFeatureCapabilityChanged(ImsServiceClass.MMTEL,
                 featureEnableArray,
                 featureDisableArray);
+        waitForHandlerAction(mCTHander, 1000);
         assertTrue(mCTUT.isVideoCallEnabled());
         verify(mImsPhone, times(1)).notifyForVideoCapabilityChanged(eq(true));
     }

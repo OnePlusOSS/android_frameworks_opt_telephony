@@ -142,7 +142,7 @@ public class ImsPhoneTest extends TelephonyTest {
     @After
     public void tearDown() throws Exception {
         mImsPhoneUT = null;
-        mImsPhoneTestHandler.quitSafely();
+        mImsPhoneTestHandler.quit();
         super.tearDown();
     }
 
@@ -388,6 +388,15 @@ public class ImsPhoneTest extends TelephonyTest {
 
         mImsPhoneUT.dial(dialString, videoState);
         verify(mImsCT).dial(dialString, videoState, null);
+    }
+
+    @Test
+    @SmallTest
+    public void testAddParticipant() throws Exception {
+        String dialString = "1234567890";
+
+        mImsPhoneUT.addParticipant(dialString, null);
+        verify(mImsCT).addParticipant(dialString, null);
     }
 
     @Test
