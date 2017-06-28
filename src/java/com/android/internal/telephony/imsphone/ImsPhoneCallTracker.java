@@ -2186,6 +2186,10 @@ public class ImsPhoneCallTracker extends CallTracker implements ImsPullCall {
                         mPendingMO.setDisconnectCause(DisconnectCause.ERROR_UNSPECIFIED);
                         sendEmptyMessageDelayed(EVENT_HANGUP_PENDINGMO, TIMEOUT_HANGUP_PENDINGMO);
                     }
+                    if (imsCall != mCallExpectedToResume && mSwitchingFgAndBgCalls) {
+                        mSwitchingFgAndBgCalls = false;
+                        mCallExpectedToResume = null;
+                    }
                 }
                 mPhone.notifySuppServiceFailed(Phone.SuppService.HOLD);
             }
@@ -3286,8 +3290,13 @@ public class ImsPhoneCallTracker extends CallTracker implements ImsPullCall {
 
     private void resetImsCapabilities() {
         log("Resetting Capabilities...");
+        boolean tmpIsVideoCallEnabled = isVideoCallEnabled();
         for (int i = 0; i < mImsFeatureEnabled.length; i++) {
             mImsFeatureEnabled[i] = false;
+        }
+
+        if (tmpIsVideoCallEnabled != isVideoCallEnabled()) {
+            mPhone.notifyForVideoCapabilityChanged(isVideoCallEnabled());
         }
     }
 
