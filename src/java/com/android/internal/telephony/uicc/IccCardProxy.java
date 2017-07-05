@@ -365,8 +365,12 @@ public class IccCardProxy extends Handler implements IccCard {
     }
 
     private void HandleDetectedState() {
-    // CAF_MSIM SAND
-//        setExternalState(State.DETECTED, false);
+        //  In hotswap cases, if card was inserted only for the time sim
+        //  was in app state detected and then removed, next absent sim state
+        //  does not gets notified since there is no change in external state.
+        //  Hence set the external state to UNKNOWN so that sim state change
+        //  intent gets broadcasted for app state detected also.
+        setExternalState(State.UNKNOWN);
     }
 
     private void updateExternalState() {
