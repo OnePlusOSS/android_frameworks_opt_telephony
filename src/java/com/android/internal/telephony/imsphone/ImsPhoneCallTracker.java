@@ -79,6 +79,7 @@ import com.android.internal.telephony.TelephonyProto.ImsConnectionState;
 import com.android.internal.telephony.TelephonyProto.TelephonyCallSession;
 import com.android.internal.telephony.TelephonyProto.TelephonyCallSession.Event.ImsCommand;
 import com.android.internal.telephony.dataconnection.DataEnabledSettings;
+import com.android.internal.telephony.SubscriptionController;
 import com.android.internal.telephony.gsm.SuppServiceNotification;
 import com.android.internal.telephony.metrics.TelephonyMetrics;
 
@@ -271,6 +272,7 @@ public class ImsPhoneCallTracker extends CallTracker implements ImsPullCall {
     private boolean mSwitchingFgAndBgCalls = false;
     private ImsCall mCallExpectedToResume = null;
     private boolean mAllowEmergencyVideoCalls = false;
+    private boolean mEnableVideoWithMobileDataOff = false;
 
     private Object mAddParticipantLock = new Object();
     private Message mAddPartResp;
@@ -598,8 +600,10 @@ public class ImsPhoneCallTracker extends CallTracker implements ImsPullCall {
     private void cacheCarrierConfiguration(int subId) {
         CarrierConfigManager carrierConfigManager = (CarrierConfigManager)
                 mPhone.getContext().getSystemService(Context.CARRIER_CONFIG_SERVICE);
-        if (carrierConfigManager == null) {
-            loge("cacheCarrierConfiguration: No carrier config service found.");
+        if (carrierConfigManager == null ||
+                !SubscriptionController.getInstance().isActiveSubId(subId)) {
+            loge("cacheCarrierConfiguration: No carrier config service found" + " " +
+                    "or not active subId = " + subId);
             return;
         }
 
@@ -609,6 +613,8 @@ public class ImsPhoneCallTracker extends CallTracker implements ImsPullCall {
             return;
         }
 
+        mEnableVideoWithMobileDataOff =
+                carrierConfig.getBoolean("config_enable_vt_with_mobile_data_off");
         mAllowEmergencyVideoCalls =
                 carrierConfig.getBoolean(CarrierConfigManager.KEY_ALLOW_EMERGENCY_VIDEO_CALLS_BOOL);
         mTreatDowngradedVideoCallsAsVideoCalls =
@@ -2902,7 +2908,7 @@ public class ImsPhoneCallTracker extends CallTracker implements ImsPullCall {
 
         // This will call into updateVideoCallFeatureValue and eventually all clients will be
         // asynchronously notified that the availability of VT over LTE has changed.
-        if (mCarrierConfigLoaded) {
+        if (mCarrierConfigLoaded && !mEnableVideoWithMobileDataOff) {
             ImsManager.updateImsServiceConfig(mPhone.getContext(), mPhone.getPhoneId(), true);
         }
     }
