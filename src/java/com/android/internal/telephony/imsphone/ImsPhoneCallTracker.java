@@ -705,10 +705,13 @@ public class ImsPhoneCallTracker extends CallTracker implements ImsPullCall {
             multiEndpoint.setExternalCallStateListener(
                     mPhone.getExternalCallTracker().getExternalCallStateListener());
         }
+
+        ImsManager.updateImsServiceConfig(mPhone.getContext(), mPhone.getPhoneId(), true);
     }
 
     private void stopListeningForCalls() {
         try {
+            resetImsCapabilities();
             // Only close on valid session.
             if (mImsManager != null && mServiceId > 0) {
                 mImsManager.close(mServiceId);
